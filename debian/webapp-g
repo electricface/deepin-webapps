@@ -1,0 +1,334 @@
+#!/usr/bin/perl -w
+use strict;
+use Config::Tiny;
+use Getopt::Long qw(:config no_ignore_case);
+use Data::Dumper;
+use File::Copy;
+use File::Basename;
+use 5.14.2;
+
+
+
+our $HTML_PATH = "/usr/share/deepin-webapps";
+our $PKG_NAME_PREFIX = "deepin-webapps-";
+our $ICON_PATH = "/usr/share/icons/hicolor/48x48/apps";
+our $APPS_PATH = "/usr/share/applications";
+our $DESKTOP_PATH = "/usr/share/applications";
+our $DEEPIN_DOCK_FILTER = "/usr/share/dde/data/filter_wminstance.ini";
+
+my %webapp_dict;
+my $filter_wminstance_orig_str = <<__EOF__
+[chrome]
+usr_share_deepin-webapps_fengyun-mini.html=fengyun-mini
+usr_share_deepin-webapps_kingsoft-online-storage.html=kingsoft-online-storage
+usr_share_deepin-webapps_kingsoft-fast-docs.html=kingsoft-fast-docs
+usr_share_deepin-webapps_kugou-music.html=kugou-music
+usr_share_deepin-webapps_kuwo-music.html=kuwo-music
+usr_share_deepin-webapps_douban.html=douban
+usr_share_deepin-webapps_fetion.html=fetion
+usr_share_deepin-webapps_baidu-hi.html=baidu-hi
+usr_share_deepin-webapps_paulrouget.html=paulrouget
+usr_share_deepin-webapps_baidu-map.html=baidu-map
+usr_share_deepin-webapps_baidu-online-storage.html=baidu-online-storage
+usr_share_deepin-webapps_baidu-music.html=baidu-music
+usr_share_deepin-webapps_pirateslovedaisies.html=pirateslovedaisies
+usr_share_deepin-webapps_youdao-note.html=youdao-note
+usr_share_deepin-webapps_sina-weibo.html=sina-weibo
+usr_share_deepin-webapps_dbank-online-storage.html=dbank-online-storage
+usr_share_deepin-webapps_ttpod.html=ttpod
+usr_share_deepin-webapps_microsoft-skydrive.html=microsoft-skydrive
+usr_share_deepin-webapps_towerim.html=towerim
+usr_share_deepin-webapps_doit-im.html=doit-im
+usr_share_deepin-webapps_chainrxn.html=chainrxn
+usr_share_deepin-webapps_cargo-bridge.html=cargo-bridge
+usr_share_deepin-webapps_xiami-music.html=xiami-music
+usr_share_kingdom-rush_kingdom-rush.html=kingdom-rush
+__EOF__
+;
+
+my $filter_wminstance_path = "filter_wminstance.ini";
+my $filter_wminstance_cfg ;
+
+if (-f $filter_wminstance_path) {
+	$filter_wminstance_cfg =
+		Config::Tiny->new->read($filter_wminstance_path);
+		debug_say( "cfg read “$filter_wminstance_path”" );
+} else {
+	$filter_wminstance_cfg =
+		Config::Tiny->new->read_string($filter_wminstance_orig_str);
+		debug_say( "cfg read origin string");
+}
+
+my %webapp_list;
+
+opendir my $up_dir , ".";
+say $ENV{PWD};
+my $d;
+
+write_debian_ctrl_head();
+for  $d ( readdir $up_dir){
+	my $d_basename = basename $d;
+	if ( -d "$d" && $d_basename =~ /^web/){
+		say "find a good dir $d";
+
+		my @ini_file = glob "$d/*.ini";
+		say "ini file";
+		say for @ini_file;
+
+		read_webapp_cfg_file( @ini_file );
+
+		say "png file";
+		my @png_file = glob "$d/*.png";
+		prepare( @png_file );
+	}
+}
+closedir $up_dir;
+write_filter_wminstance(  );
+
+
+sub read_webapp_cfg_file {
+	for my $cfg_file ( @_ ){
+		my $cfg;
+		unless ($cfg = Config::Tiny->new->read($cfg_file) ){
+			debug_say( "跳过配置文件 “$cfg_file” : ". Config::Tiny->errstr );
+			next;
+		}
+		debug_say( "Read cfg file $cfg_file" );
+		for my $pkg_name ( keys %{ $cfg } ){
+			$webapp_dict{$pkg_name} = $cfg;
+			my $cfg_bname = basename $cfg_file;
+			my $arr_ref = $webapp_list{$cfg_bname};
+			push @$arr_ref , $pkg_name;
+			$webapp_list{$cfg_file} = $arr_ref;
+
+			debug_say(" -> $pkg_name in  $cfg");
+		}
+	}
+}
+
+sub prepare {
+	for my $icon_path ( @_ ){
+		my $webapp_cfg =  get_webapp_cfg($icon_path) or next;
+		debug_say( "icon file: $icon_path");
+		prepare_debian_pkg( $webapp_cfg, $icon_path );
+	}
+
+
+}
+
+# END
+
+sub get_desktop_fields {
+	my ($cfg_ref, $start_with ) = @_; 
+	my @items = grep /^$start_with/ , keys %{ $cfg_ref };
+	my $item_fields = join "\n" , (map { "$_=". $cfg_ref->{$_} } @items);
+	return $item_fields;
+}
+
+sub get_webapp_cfg{
+	my $icon_path = shift;
+	my $pkg_name = fileparse $icon_path , '.png';
+	my $webapp_cfg ;
+	unless ( $webapp_cfg = $webapp_dict{$pkg_name} ){
+		say "出错了: 你给的 webapp 的配置文件不包含有关 `$pkg_name` 的信息";
+		return undef;
+	}
+	return $webapp_cfg;
+}
+
+sub write_desktop {
+	my ($webapp_cfg, $pkg_name,$desktop_path) = @_;
+
+	my $cfg_ref = $webapp_cfg->{$pkg_name};
+	my ($w,$h) = split /x/ , $cfg_ref->{Size};
+	my $url = $cfg_ref->{Url};
+
+	my $name_fields= get_desktop_fields($cfg_ref , "Name");
+	my $comment_fields= get_desktop_fields($cfg_ref , "Comment");	
+
+	my $categories = $cfg_ref->{Categories};
+	my $desktop_fh;
+	my $v_pkg_name = vaild_pkg_name($pkg_name);
+	$_ = dirname $desktop_path;
+	qx(mkdir -p $_);
+	open $desktop_fh , ">" , $desktop_path
+		or die "$! Can't write $desktop_path";
+	
+	my $desktop_file_content = <<__EOF__
+[Desktop Entry]
+Version=1.0
+$name_fields
+$comment_fields
+Type=Application
+Exec=/usr/bin/google-chrome --app=file://$HTML_PATH/$pkg_name.html?url=$url&width=$w&height=$h
+
+Icon=$pkg_name
+Categories=Network;$categories
+Terminal=false
+
+__EOF__
+;
+	print $desktop_fh $desktop_file_content;
+	debug_say("---" x 20, $desktop_file_content);
+	close $desktop_fh;
+	chmod 0755, $desktop_path; 
+}
+
+sub prepare_debian_pkg {
+	my ($webapp_cfg,$icon_path) = @_;
+	my $key_id = fileparse $icon_path , '.png';
+	my $cfg_ref = $webapp_cfg->{$key_id};
+	my $v_pkg_name = vaild_pkg_name($key_id);
+	my $desktop_path = "desktop/$v_pkg_name.desktop";
+	my $html_path = "html/$v_pkg_name.html";
+	
+	append_debian_ctrl($webapp_cfg,$key_id);
+	write_debian_install($icon_path, $desktop_path, $html_path);
+	write_desktop($webapp_cfg,$key_id,$desktop_path);
+	write_html($key_id,$html_path);
+
+	set_filter_wminstance($v_pkg_name, $key_id);
+	
+}
+
+sub write_filter_wminstance {
+
+	#todo: add debug condititon
+	if (exists $ENV{DEBUG} && $ENV{DEBUG} ne 0){
+		for (keys %{ $filter_wminstance_cfg->{chrome} } ){
+			say "$_ => ". $filter_wminstance_cfg->{chrome}{$_}; 
+		}
+	}
+	$filter_wminstance_cfg->write($filter_wminstance_path)
+		or say Config::Tiny->errstr; 
+	debug_say("write filter wminstance “$filter_wminstance_path”");
+}
+
+sub set_filter_wminstance {
+	my ($v_pkg_name,$icon_basename) = @_;
+
+	my $html_path = "/usr/share/deepin-webapps/$v_pkg_name.html";
+	my $key = $html_path =~ s[/][_]gr;
+	$key =~ s/^_+//;
+	my $value = fileparse $icon_basename ,'.png';
+	$filter_wminstance_cfg->{chrome}{$key} = $value;
+	debug_say("$key => $value");
+}
+
+sub vaild_pkg_name {
+	my $name = shift;
+	$name =~ s/[!@#$%&*()_+=.]/-/g;
+	return lc $name;
+}
+
+
+
+sub write_debian_install {
+	my ( $icon_path,$desktop_path,$html_path) = @_;
+	my $key_id = fileparse $icon_path,'.png';
+	my $v_pkg_name  = vaild_pkg_name($key_id);
+	my $install_path = "debian/$PKG_NAME_PREFIX$v_pkg_name.install";
+
+	open my $install_fh ,'>',$install_path;
+	my $install_content= <<__EOF__
+$icon_path  $ICON_PATH
+$desktop_path $DESKTOP_PATH
+$html_path  $HTML_PATH
+__EOF__
+;
+	print $install_fh $install_content;
+	debug_say( $install_content);
+	close $install_path;
+}
+
+sub write_debian_ctrl_head {
+	open my $control_fh , '>' , "debian/control";	
+	my $debian_ctrl_head = <<__EOF__
+Source: deepin-webapp-gen
+Section: web
+Priority: extra
+Maintainer: Wen Tai <songwentai\@linuxdeepin.com>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.3
+
+__EOF__
+;
+	print $control_fh $debian_ctrl_head;
+	debug_say("---" x 20 , $debian_ctrl_head);
+	close $control_fh;
+}
+
+sub append_debian_ctrl {
+	my ($webapp_cfg, $key_id) = @_;	
+	open my $control_fh ,'>>','debian/control';
+	my $v_pkg_name = vaild_pkg_name($key_id);
+	my $cfg_ref = $webapp_cfg->{$key_id};
+	my $homepage = $cfg_ref->{Homepage};
+	my $name = $cfg_ref->{Name};
+	my $description = $cfg_ref->{Comment};	
+	my $debian_ctrl_content = <<__EOF__
+
+Package: $PKG_NAME_PREFIX$v_pkg_name
+Architecture: all
+Depends: google-chrome-stable | google-chrome-beta | google-chrome-unstable, xdg-utils
+Homepage: $homepage
+Description: $name
+ $description
+__EOF__
+;
+	print $control_fh $debian_ctrl_content;
+	debug_say( "---" x 20,$debian_ctrl_content);
+	close $control_fh;
+}
+
+
+sub debug_say {
+	if (exists $ENV{DEBUG} && $ENV{DEBUG} ne 0){
+		say for @_;
+	}
+}
+
+sub debug_system {
+	if (exists $ENV{DEBUG} && $ENV{DEBUG} ne 0){
+		system @_;
+	}
+
+}
+
+sub write_html {
+	my $html_content = <<__EOF__
+<html>
+    <head>
+        <title>
+            Loading...
+        </title>
+    </head>
+    <script>
+        info = {}
+        var params = location.search.substring(1).split('&')
+        for (var i=0; i<params.length; i++) {
+            var p = params[i].split('=')
+            info[decodeURIComponent(p[0])] = decodeURIComponent(p[1])
+        }
+        w = info["width"]
+        h = info["height"]
+        url = info["url"]
+        if (w && h) {
+            window.resizeTo(w, h);
+            window.moveTo((screen.width - w) / 2, (screen.height-h) / 2)
+        }
+        window.location = url
+    </script>
+</html>
+__EOF__
+;
+	my ($pkg_name,$html_path) = @_;
+	my $v_pkg_name = vaild_pkg_name($pkg_name);
+	$_ = dirname $html_path;
+	qx(mkdir -p $_);
+	open my $html_fh , ">" , $html_path
+		or die "$! Can't write $html_path";
+	print $html_fh $html_content;
+	close $html_fh;
+}
+
