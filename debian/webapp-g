@@ -7,7 +7,7 @@ use 5.14.2;
 
 my %webapp_dict;
 our $PKG_NAME_PREFIX = "deepin-webapps-";
-my $PKG_MAINTAINER ='Song Wen Tai <songwentai@linuxdeepin.com>';
+my $PKG_MAINTAINER ='Deepin Packages Builder <packages@linuxdeepin.com>';
 
 our $HTML_PATH = "/usr/share/deepin-webapps";
 our $ICON_PATH = "/usr/share/icons/hicolor/48x48/apps";
@@ -193,9 +193,8 @@ sub write_filter_wminstance {
 sub set_filter_wminstance {
 	my ($v_pkg_name,$icon_basename) = @_;
 
-	my $html_path = "/usr/share/deepin-webapps/$v_pkg_name.html";
+	my $html_path = "$HTML_PATH/$v_pkg_name.html";
 	my $key = $html_path =~ s[/][_]gr;
-	$key =~ s/^_+//;
 	my $value = fileparse $icon_basename ,'.png';
 	$filter_wminstance_cfg->{chrome}{$key} = $value;
 	debug_say("$key => $value" );
