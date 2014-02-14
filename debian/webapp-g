@@ -1,22 +1,19 @@
 #!/usr/bin/perl -w
 use strict;
 use Config::Tiny;
-use Getopt::Long qw(:config no_ignore_case);
 use Data::Dumper;
-use File::Copy;
 use File::Basename;
 use 5.14.2;
 
-
+my %webapp_dict;
+our $PKG_NAME_PREFIX = "deepin-webapps-";
+my $PKG_MAINTAINER ='Song Wen Tai <songwentai@linuxdeepin.com>';
 
 our $HTML_PATH = "/usr/share/deepin-webapps";
-our $PKG_NAME_PREFIX = "deepin-webapps-";
 our $ICON_PATH = "/usr/share/icons/hicolor/48x48/apps";
-our $APPS_PATH = "/usr/share/applications";
 our $DESKTOP_PATH = "/usr/share/applications";
-our $DEEPIN_DOCK_FILTER = "/usr/share/dde/data/filter_wminstance.ini";
+my $filter_wminstance_path = "filter_wminstance.ini";
 
-my %webapp_dict;
 my $filter_wminstance_orig_str = <<__EOF__
 [chrome]
 usr_share_deepin-webapps_fengyun-mini.html=fengyun-mini
@@ -46,7 +43,6 @@ usr_share_kingdom-rush_kingdom-rush.html=kingdom-rush
 __EOF__
 ;
 
-my $filter_wminstance_path = "filter_wminstance.ini";
 my $filter_wminstance_cfg ;
 
 if (-f $filter_wminstance_path) {
@@ -62,22 +58,14 @@ if (-f $filter_wminstance_path) {
 my %webapp_list;
 
 opendir my $up_dir , ".";
-say $ENV{PWD};
-my $d;
 
 write_debian_ctrl_head();
-for  $d ( readdir $up_dir){
+for my $d ( readdir $up_dir){
 	my $d_basename = basename $d;
 	if ( -d "$d" && $d_basename =~ /^web/){
-		say "find a good dir $d";
-
+		debug_say("find a good dir $d");
 		my @ini_file = glob "$d/*.ini";
-		say "ini file";
-		say for @ini_file;
-
 		read_webapp_cfg_file( @ini_file );
-
-		say "png file";
 		my @png_file = glob "$d/*.png";
 		prepare( @png_file );
 	}
@@ -109,11 +97,9 @@ sub read_webapp_cfg_file {
 sub prepare {
 	for my $icon_path ( @_ ){
 		my $webapp_cfg =  get_webapp_cfg($icon_path) or next;
-		debug_say( "icon file: $icon_path");
+		debug_say( "===" x 20 , "icon file: $icon_path");
 		prepare_debian_pkg( $webapp_cfg, $icon_path );
 	}
-
-
 }
 
 # END
@@ -212,7 +198,7 @@ sub set_filter_wminstance {
 	$key =~ s/^_+//;
 	my $value = fileparse $icon_basename ,'.png';
 	$filter_wminstance_cfg->{chrome}{$key} = $value;
-	debug_say("$key => $value");
+	debug_say("$key => $value" );
 }
 
 sub vaild_pkg_name {
@@ -237,7 +223,7 @@ $html_path  $HTML_PATH
 __EOF__
 ;
 	print $install_fh $install_content;
-	debug_say( $install_content);
+	debug_say("Files:", $install_content);
 	close $install_path;
 }
 
@@ -247,7 +233,7 @@ sub write_debian_ctrl_head {
 Source: deepin-webapp-gen
 Section: web
 Priority: extra
-Maintainer: Wen Tai <songwentai\@linuxdeepin.com>
+Maintainer: $PKG_MAINTAINER
 Build-Depends: debhelper (>= 8.0.0)
 Standards-Version: 3.9.3
 
@@ -277,7 +263,7 @@ Description: $name
 __EOF__
 ;
 	print $control_fh $debian_ctrl_content;
-	debug_say( "---" x 20,$debian_ctrl_content);
+	debug_say($debian_ctrl_content);
 	close $control_fh;
 }
 
