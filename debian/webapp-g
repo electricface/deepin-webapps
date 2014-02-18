@@ -10,12 +10,13 @@ our $PKG_NAME_PREFIX = "deepin-webapps-";
 my $PKG_MAINTAINER ='Deepin Packages Builder <packages@linuxdeepin.com>';
 
 our $HTML_PATH = "/usr/share/deepin-webapps";
-our $ICON_PATH = "/usr/share/icons/hicolor/48x48/apps";
+our $ICON_PATH = "/usr/share/icons/Deepin/apps/48/";
 our $DESKTOP_PATH = "/usr/share/applications";
 my $filter_wminstance_path = "filter_wminstance.ini";
 
 my $filter_wminstance_orig_str = <<__EOF__
 [chrome]
+usr_share_deepin-webapps_12306.html=12306
 usr_share_deepin-webapps_fengyun-mini.html=fengyun-mini
 usr_share_deepin-webapps_kingsoft-online-storage.html=kingsoft-online-storage
 usr_share_deepin-webapps_kingsoft-fast-docs.html=kingsoft-fast-docs
@@ -43,17 +44,18 @@ usr_share_kingdom-rush_kingdom-rush.html=kingdom-rush
 __EOF__
 ;
 
-my $filter_wminstance_cfg ;
-
-if (-f $filter_wminstance_path) {
-	$filter_wminstance_cfg =
-		Config::Tiny->new->read($filter_wminstance_path);
-		debug_say( "cfg read “$filter_wminstance_path”" );
-} else {
-	$filter_wminstance_cfg =
-		Config::Tiny->new->read_string($filter_wminstance_orig_str);
-		debug_say( "cfg read origin string");
+my $filter_wminstance_cfg =
+	Config::Tiny->new->read_string($filter_wminstance_orig_str);
+debug_say( "cfg read origin string");
+my @old_webapps;
+debug_say("old webapp: ");
+for ( split /\n/ , $filter_wminstance_orig_str ){
+	if ( /webapps_(.*)\.html/ ){
+		debug_say (" $1");
+		push @old_webapps,$_;
+	}
 }
+
 
 my %webapp_list;
 
@@ -123,9 +125,9 @@ sub get_webapp_cfg{
 }
 
 sub write_desktop {
-	my ($webapp_cfg, $pkg_name,$desktop_path) = @_;
+	my ($webapp_cfg, $key_id,$desktop_path) = @_;
 
-	my $cfg_ref = $webapp_cfg->{$pkg_name};
+	my $cfg_ref = $webapp_cfg->{$key_id};
 	my ($w,$h) = split /x/ , $cfg_ref->{Size};
 	my $url = $cfg_ref->{Url};
 
@@ -134,7 +136,7 @@ sub write_desktop {
 
 	my $categories = $cfg_ref->{Categories};
 	my $desktop_fh;
-	my $v_pkg_name = vaild_pkg_name($pkg_name);
+	my $v_pkg_name = vaild_pkg_name($key_id);
 	$_ = dirname $desktop_path;
 	qx(mkdir -p $_);
 	open $desktop_fh , ">" , $desktop_path
@@ -146,9 +148,9 @@ Version=1.0
 $name_fields
 $comment_fields
 Type=Application
-Exec=/usr/bin/google-chrome --app=file://$HTML_PATH/$pkg_name.html?url=$url&width=$w&height=$h
+Exec=/usr/bin/google-chrome --app=file://$HTML_PATH/$v_pkg_name.html?url=$url&width=$w&height=$h
 
-Icon=$pkg_name
+Icon=$key_id
 Categories=Network;$categories
 Terminal=false
 
@@ -165,6 +167,11 @@ sub prepare_debian_pkg {
 	my $key_id = fileparse $icon_path , '.png';
 	my $cfg_ref = $webapp_cfg->{$key_id};
 	my $v_pkg_name = vaild_pkg_name($key_id);
+
+	if (grep {$_ eq $v_pkg_name } @old_webapps ){
+		say "出错了 重复应用 $v_pkg_name";
+		return;
+	}
 	my $desktop_path = "desktop/$v_pkg_name.desktop";
 	my $html_path = "html/$v_pkg_name.html";
 	
@@ -195,6 +202,7 @@ sub set_filter_wminstance {
 
 	my $html_path = "$HTML_PATH/$v_pkg_name.html";
 	my $key = $html_path =~ s[/][_]gr;
+	$key =~ s/^_+//;
 	my $value = fileparse $icon_basename ,'.png';
 	$filter_wminstance_cfg->{chrome}{$key} = $value;
 	debug_say("$key => $value" );
@@ -202,7 +210,10 @@ sub set_filter_wminstance {
 
 sub vaild_pkg_name {
 	my $name = shift;
-	$name =~ s/[!@#$%&*()_+=.]/-/g;
+	debug_say( "1: $name" );
+	$name =~ s/[!@&_+=.]/-/g;
+	
+	debug_say( "2: $name" );
 	return lc $name;
 }
 
