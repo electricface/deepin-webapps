@@ -1,3 +1,9 @@
 /desktop/
 /html/
-
+/debian/*.install
+/debian/*.log
+/debian/control
+/debian/deepin-webapps-*
+/debian/*.substvars
+/debian/files
+/debian/substvars

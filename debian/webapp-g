@@ -60,7 +60,7 @@ for ( split /\n/ , $filter_wminstance_orig_str ){
 my %webapp_list;
 
 opendir my $up_dir , ".";
-
+clean_old_deepin_webapps();
 write_debian_ctrl_head();
 for my $d ( readdir $up_dir){
 	my $d_basename = basename $d;
@@ -75,6 +75,15 @@ for my $d ( readdir $up_dir){
 closedir $up_dir;
 write_filter_wminstance(  );
 
+#end
+
+sub clean_old_deepin_webapps {
+	if ( $ENV{PWD} =~ m/deepin-webapps$/ ){
+		system("rm -r debian/deepin-webapps-*");
+	} else {
+		say "not in right pwd : $ENV{PWD}";
+	}
+}
 
 sub read_webapp_cfg_file {
 	for my $cfg_file ( @_ ){
