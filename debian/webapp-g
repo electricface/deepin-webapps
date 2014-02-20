@@ -253,7 +253,7 @@ Source: deepin-webapp-gen
 Section: web
 Priority: extra
 Maintainer: $PKG_MAINTAINER
-Build-Depends: debhelper (>= 8.0.0)
+Build-Depends: debhelper (>= 8.0.0),libconfig-tiny-perl
 Standards-Version: 3.9.3
 
 __EOF__
