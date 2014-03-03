@@ -11,11 +11,12 @@ my $PKG_MAINTAINER ='Deepin Packages Builder <packages@linuxdeepin.com>';
 
 our $HTML_PATH = "/usr/share/deepin-webapps";
 our $ICON_PATH = "/usr/share/icons/Deepin/apps/48/";
+our $HICOLOR_ICON_PATH = "/usr/share/icons/hicolor/48x48/apps";
 our $DESKTOP_PATH = "/usr/share/applications";
 my $filter_wminstance_path = "filter_wminstance.ini";
 
 my $filter_wminstance_orig_str = <<__EOF__
-[chrome]
+[google-chrome]
 usr_share_deepin-webapps_12306.html=12306
 usr_share_deepin-webapps_fengyun-mini.html=fengyun-mini
 usr_share_deepin-webapps_kingsoft-online-storage.html=kingsoft-online-storage
@@ -197,8 +198,8 @@ sub write_filter_wminstance {
 
 	#todo: add debug condititon
 	if (exists $ENV{DEBUG} && $ENV{DEBUG} ne 0){
-		for (keys %{ $filter_wminstance_cfg->{chrome} } ){
-			say "$_ => ". $filter_wminstance_cfg->{chrome}{$_}; 
+		for (keys %{ $filter_wminstance_cfg->{"google-chrome" } } ){
+			say "$_ => ". $filter_wminstance_cfg->{ "google-chrome"}{$_}; 
 		}
 	}
 	$filter_wminstance_cfg->write($filter_wminstance_path)
@@ -213,7 +214,7 @@ sub set_filter_wminstance {
 	my $key = $html_path =~ s[/][_]gr;
 	$key =~ s/^_+//;
 	my $value = fileparse $icon_basename ,'.png';
-	$filter_wminstance_cfg->{chrome}{$key} = $value;
+	$filter_wminstance_cfg->{"google-chrome"}{$key} = $value;
 	debug_say("$key => $value" );
 }
 
@@ -237,6 +238,7 @@ sub write_debian_install {
 	open my $install_fh ,'>',$install_path;
 	my $install_content= <<__EOF__
 $icon_path  $ICON_PATH
+$icon_path  $HICOLOR_ICON_PATH
 $desktop_path $DESKTOP_PATH
 $html_path  $HTML_PATH
 __EOF__
