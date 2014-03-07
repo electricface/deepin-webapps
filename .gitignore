@@ -1,5 +1,6 @@
 /desktop/
 /html/
+*.swp
 /debian/*.install
 /debian/*.log
 /debian/control
